@@ -1,0 +1,4 @@
+The quick brown fox jumps over the lazy dog.
+The dog was sleeping under the tree.
+A quick fox is faster than a lazy dog.
+The tree provides shade for the sleeping dog.

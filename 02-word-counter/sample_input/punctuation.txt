@@ -1,0 +1,4 @@
+Hello, world!
+"Hello," said the programmer.
+World-class programming: it's amazing!
+Don't you think so?
