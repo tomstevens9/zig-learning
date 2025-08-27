@@ -3,7 +3,7 @@ const std = @import("std");
 pub const TokenizerError = error{
     InvalidValue,
     UnclosedString,
-};
+} || std.mem.Allocator.Error;
 
 const TRUE = "true";
 const FALSE = "false";
@@ -21,17 +21,32 @@ const JsonToken = union(enum) {
     NULL,
     STRING: []const u8,
     NUMBER: f32,
+
+    const Self = @This();
+    
+    pub fn deinit(self: Self, allocator: std.mem.Allocator) void {
+        if (self == .STRING) {
+            allocator.free(self.STRING);
+        }
+    }
 };
 
 pub const JsonTokeniser = struct {
+    allocator: std.mem.Allocator,
     input: []const u8,
     pos: usize,
     peeked_value: ?JsonToken,
 
     const Self = @This();
 
-    pub fn init(input: []const u8) JsonTokeniser {
-        return .{ .input = input, .pos = 0, .peeked_value = null };
+    pub fn init(allocator: std.mem.Allocator, input: []const u8) JsonTokeniser {
+        return .{ .allocator = allocator, .input = input, .pos = 0, .peeked_value = null };
+    }
+
+    pub fn deinit(self: Self) void {
+        if (self.peeked_value) |token| {
+            token.deinit(self.allocator);
+        }
     }
 
     pub fn peek(self: *Self) TokenizerError!?JsonToken {
@@ -58,10 +73,6 @@ pub const JsonTokeniser = struct {
                 else => try self.tokeniseCharacter(),
             };
         }
-        if (self.peeked_value) |token| {
-            std.debug.print("peek() - ", .{});
-            printToken(token);
-        }
         return self.peeked_value;
     }
 
@@ -69,11 +80,12 @@ pub const JsonTokeniser = struct {
         if (self.peeked_value == null) _ = try self.peek();
         const return_value = self.peeked_value;
         self.peeked_value = null;
-        if (return_value) |token| {
-            std.debug.print("next() - ", .{});
-            printToken(token);
-        }
+        // Pass ownership of the token to the caller
         return return_value;
+    }
+
+    pub fn skip(self: *Self) TokenizerError!void {
+        if (try self.next()) |token| token.deinit(self.allocator);
     }
 
     fn peekInput(self: *Self) u8 {
@@ -96,11 +108,12 @@ pub const JsonTokeniser = struct {
                 return TokenizerError.UnclosedString;
             }
         }
-        // TODO Should this be allocated instead?
         // Store the string itself as part of the tagged union. Exclude the quotation marks
         const slice = self.input[self.pos + 1..self.pos + offset];
+        const owned_string = try self.allocator.dupe(u8, slice);
+        errdefer self.allocator.free(owned_string);
         self.pos += (offset + 1);
-        return .{ .STRING = slice };
+        return .{ .STRING = owned_string };
     }
 
     fn tokeniseNumber(self: *Self) JsonToken {

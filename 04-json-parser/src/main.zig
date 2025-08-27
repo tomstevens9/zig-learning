@@ -19,7 +19,7 @@ pub fn main() !void {
     const allocator = arena.allocator();
 
     var result = try json_parser.parse(allocator, TEST_INPUT);
-    defer result.deinit();
+    defer result.deinit(allocator);
 
     std.debug.print("--- RESULT ---\n", .{});
     std.debug.print("name: {s}\n", .{ result.object.get("name").?.string });

@@ -1,7 +1,6 @@
 const std = @import("std");
 const JsonTokeniser = @import("tokeniser.zig").JsonTokeniser;
 const TokenizerError = @import("tokeniser.zig").TokenizerError;
-const printToken = @import("tokeniser.zig").printToken;
 
 const ParserError = error {
     UnexpectedToken,
@@ -19,7 +18,24 @@ const JsonValue = union(enum) {
     const Self = @This();
 
     // TODO implement deinit()
-    pub fn deinit(_: *Self) void {}
+    pub fn deinit(self: *Self, allocator: std.mem.Allocator) void {
+        switch(self.*) {
+            .object => |*obj| {
+                var iterator = obj.iterator();
+                while (iterator.next()) |entry| {
+                    allocator.free(entry.key_ptr.*);
+                    entry.value_ptr.deinit(allocator);
+                }
+                obj.deinit();
+            },
+            .array => |*arr| {
+                for (arr.items) |*item| item.deinit(allocator);
+                arr.deinit(allocator);
+            },
+            .string => |str| allocator.free(str),
+            else => return,
+        }
+    }
 };
 
 const JsonParser = struct {
@@ -37,12 +53,10 @@ const JsonParser = struct {
     }
 
     fn parseElement(self: *Self) ParserError!JsonValue {
-        std.debug.print("parseElement()\n", .{});
-        const token = try self.tokeniser.next() orelse {
+        var token = try self.tokeniser.next() orelse {
             return ParserError.UnexpectedEnd;
         };
-        std.debug.print("parseElement() Token - ", .{});
-        printToken(token);
+        defer token.deinit(self.allocator);
         return switch (token) {
             .NUMBER => .{ .number = token.NUMBER },
             .STRING => JsonValue{ .string = try self.allocator.dupe(u8, token.STRING) },
@@ -56,16 +70,14 @@ const JsonParser = struct {
     }
 
     fn parseArray(self: *Self) ParserError!JsonValue {
-        std.debug.print("parseArray()\n", .{});
         var array_list = std.ArrayList(JsonValue){};
         // Handle special case of empty array
         if (try self.tokeniser.peek()) |token| {
             if (token == .CLOSE_SQUARE_BRACE) {
-                _ = try self.tokeniser.next();  // Consume token
+                try self.tokeniser.skip();  // Consume token
                 return .{ .array = array_list};
             }
         }
-        std.debug.print("parseArray() - Array not empty\n", .{});
 
         while(true) {
             const element = try self.parseElement();
@@ -73,12 +85,10 @@ const JsonParser = struct {
             const token = try self.tokeniser.peek() orelse return ParserError.UnexpectedEnd;
             switch (token) {
                 .CLOSE_SQUARE_BRACE => {
-                    _ = try self.tokeniser.next(); // Consume the token
+                    try self.tokeniser.skip();
                     break;
                 },
-                .COMMA => {
-                    _ = try self.tokeniser.next(); // Consume the token
-                },
+                .COMMA => try self.tokeniser.skip(),
                 else => return ParserError.UnexpectedToken,
             }
         }
@@ -86,37 +96,37 @@ const JsonParser = struct {
     }
 
     fn parseObject(self: *Self) ParserError!JsonValue {
-        std.debug.print("parseObject()\n", .{});
         var hash_map = std.StringHashMap(JsonValue).init(self.allocator);
+        errdefer hash_map.deinit();
+
         // Handle special case of empty object
         if (try self.tokeniser.peek()) |token| {
             if (token == .CLOSE_CURLY_BRACE) {
-                _ = try self.tokeniser.next();  // Consume token
+                try self.tokeniser.skip();
                 return .{ .object = hash_map};
             }
         }
-        std.debug.print("parseObject() - Object not empty\n", .{});
 
         while(true) {
             const key_token = try self.tokeniser.next() orelse return ParserError.UnexpectedEnd;
+            defer key_token.deinit(self.allocator);
             const key = switch (key_token) {
-                .STRING => key_token.STRING,
+                .STRING => try self.allocator.dupe(u8, key_token.STRING),
                 else => return ParserError.UnexpectedToken,
             };
-            // TODO Check that key is string
+            errdefer self.allocator.free(key);
             const expected_colon_token = try self.tokeniser.next() orelse return ParserError.UnexpectedEnd;
+            defer expected_colon_token.deinit(self.allocator);
             if (expected_colon_token != .COLON) return ParserError.UnexpectedToken;
             const value = try self.parseElement();
             try hash_map.put(key, value);
             const token = try self.tokeniser.peek() orelse return ParserError.UnexpectedEnd;
             switch (token) {
                 .CLOSE_CURLY_BRACE => {
-                    _ = try self.tokeniser.next(); // Consume the token
+                    try self.tokeniser.skip();
                     break;
                 },
-                .COMMA => {
-                    _ = try self.tokeniser.next(); // Consume the token
-                },
+                .COMMA => try self.tokeniser.skip(),
                 else => return ParserError.UnexpectedToken,
             }
         }
@@ -125,7 +135,8 @@ const JsonParser = struct {
 };
 
 pub fn parse(allocator: std.mem.Allocator, input: []const u8) ParserError!JsonValue {
-    var tokeniser = JsonTokeniser.init(input);
+    var tokeniser = JsonTokeniser.init(allocator, input);
+    tokeniser.deinit();
     var parser = JsonParser.init(allocator, &tokeniser);
     return parser.parse();
 }
