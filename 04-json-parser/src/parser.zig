@@ -15,9 +15,14 @@ const JsonValue = union(enum) {
     string: []const u8,
     boolean: bool,
     null_value,
+
+    const Self = @This();
+
+    // TODO implement deinit()
+    pub fn deinit(_: *Self) void {}
 };
 
-pub const JsonParser = struct {
+const JsonParser = struct {
     allocator: std.mem.Allocator,
     tokeniser: *JsonTokeniser,
 
@@ -26,8 +31,6 @@ pub const JsonParser = struct {
     pub fn init(allocator: std.mem.Allocator, tokeniser: *JsonTokeniser) JsonParser {
         return JsonParser{ .allocator = allocator, .tokeniser = tokeniser };
     }
-
-    // TODO implement deinit()
 
     pub fn parse(self: *Self) ParserError!JsonValue {
         return try self.parseElement();
@@ -120,3 +123,9 @@ pub const JsonParser = struct {
         return .{ .object = hash_map};
     }
 };
+
+pub fn parse(allocator: std.mem.Allocator, input: []const u8) ParserError!JsonValue {
+    var tokeniser = JsonTokeniser.init(input);
+    var parser = JsonParser.init(allocator, &tokeniser);
+    return parser.parse();
+}

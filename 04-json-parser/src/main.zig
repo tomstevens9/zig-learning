@@ -1,26 +1,26 @@
 const std = @import("std");
-const JsonTokeniser = @import("tokeniser.zig").JsonTokeniser;
-const JsonParser = @import("parser.zig").JsonParser;
+const json_parser = @import("parser.zig");
+
+const TEST_INPUT = 
+    \\{
+    \\  "name": "Tom Stevens",
+    \\  "age": 29,
+    \\  "ownsDog": true,
+    \\  "ownsCat": false,
+    \\  "sample": null
+    \\}
+;
 
 
 pub fn main() !void {
-    const test_input = 
-        \\{
-        \\  "name": "Tom Stevens",
-        \\  "age": 29,
-        \\  "ownsDog": true,
-        \\  "ownsCat": false,
-        \\  "sample": null
-        \\}
-    ;
 
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
     const allocator = arena.allocator();
 
-    var tokeniser = JsonTokeniser.init(test_input);
-    var parser = JsonParser.init(allocator, &tokeniser);
-    const result = try parser.parse();
+    var result = try json_parser.parse(allocator, TEST_INPUT);
+    defer result.deinit();
+
     std.debug.print("--- RESULT ---\n", .{});
     std.debug.print("name: {s}\n", .{ result.object.get("name").?.string });
     std.debug.print("age: {d}\n", .{ result.object.get("age").?.number });
