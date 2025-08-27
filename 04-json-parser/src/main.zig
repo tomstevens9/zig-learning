@@ -1,7 +1,7 @@
 const std = @import("std");
 const json_parser = @import("parser.zig");
 
-const TEST_INPUT = 
+const TEST_INPUT =
     \\{
     \\  "name": "Tom Stevens",
     \\  "age": 29,
@@ -11,9 +11,7 @@ const TEST_INPUT =
     \\}
 ;
 
-
 pub fn main() !void {
-
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
     const allocator = arena.allocator();
@@ -22,11 +20,11 @@ pub fn main() !void {
     defer result.deinit(allocator);
 
     std.debug.print("--- RESULT ---\n", .{});
-    std.debug.print("name: {s}\n", .{ result.object.get("name").?.string });
-    std.debug.print("age: {d}\n", .{ result.object.get("age").?.number });
-    std.debug.print("owns dog: {s}\n", .{ boolToStr(result.object.get("ownsDog").?.boolean )});
-    std.debug.print("owns cat: {s}\n", .{ boolToStr(result.object.get("ownsCat").?.boolean )});
-    std.debug.print("sample: {s}\n", .{ if (result.object.get("sample").? == .null_value) "Null" else "NotNull"  });
+    std.debug.print("name: {s}\n", .{result.object.get("name").?.string});
+    std.debug.print("age: {d}\n", .{result.object.get("age").?.number});
+    std.debug.print("owns dog: {s}\n", .{boolToStr(result.object.get("ownsDog").?.boolean)});
+    std.debug.print("owns cat: {s}\n", .{boolToStr(result.object.get("ownsCat").?.boolean)});
+    std.debug.print("sample: {s}\n", .{if (result.object.get("sample").? == .null_value) "Null" else "NotNull"});
 }
 
 fn boolToStr(b: bool) []const u8 {

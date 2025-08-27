@@ -23,7 +23,7 @@ const JsonToken = union(enum) {
     NUMBER: f32,
 
     const Self = @This();
-    
+
     pub fn deinit(self: Self, allocator: std.mem.Allocator) void {
         if (self == .STRING) {
             allocator.free(self.STRING);
@@ -57,11 +57,11 @@ pub const JsonTokeniser = struct {
             return null;
         }
         // Skip any whitespace
-        while (std.ascii.isWhitespace(self.peekInput())) {
+        while (std.ascii.isWhitespace(self.peekInput() orelse return null)) {
             self.pos += 1;
         }
         // Peek the next value
-        const current_char = self.peekInput();
+        const current_char = self.peekInput() orelse return null;
         if (std.ascii.isDigit(current_char) or current_char == '-') {
             self.peeked_value = self.tokeniseNumber();
         } else {
@@ -88,12 +88,13 @@ pub const JsonTokeniser = struct {
         if (try self.next()) |token| token.deinit(self.allocator);
     }
 
-    fn peekInput(self: *Self) u8 {
+    fn peekInput(self: *Self) ?u8 {
+        if (self.pos >= self.input.len) return null;
         return self.input[self.pos];
     }
 
-    fn consume(self: *Self) u8 {
-        const current_char = self.peekInput();
+    fn consume(self: *Self) ?u8 {
+        const current_char = self.peekInput() orelse return null;
         self.pos += 1;
         return current_char;
     }
@@ -101,7 +102,7 @@ pub const JsonTokeniser = struct {
     fn tokeniseString(self: *Self) TokenizerError!JsonToken {
         // TODO support escape sequences
         // Look ahead to find the closing quote
-        var offset: u32 = 1;
+        var offset: usize = 1;
         while (self.input[self.pos + offset] != '"') {
             offset += 1;
             if (self.pos + offset >= self.input.len) {
@@ -109,7 +110,7 @@ pub const JsonTokeniser = struct {
             }
         }
         // Store the string itself as part of the tagged union. Exclude the quotation marks
-        const slice = self.input[self.pos + 1..self.pos + offset];
+        const slice = self.input[self.pos + 1 .. self.pos + offset];
         const owned_string = try self.allocator.dupe(u8, slice);
         errdefer self.allocator.free(owned_string);
         self.pos += (offset + 1);
@@ -118,14 +119,14 @@ pub const JsonTokeniser = struct {
 
     fn tokeniseNumber(self: *Self) JsonToken {
         // TODO extend to support numbers other than positive integers
-        var offset: u32 = 1;
+        var offset: usize = 1;
         while (std.ascii.isDigit(self.input[self.pos + offset])) {
             offset += 1;
             if (self.pos + offset >= self.input.len) {
                 break;
             }
         }
-        const slice = self.input[self.pos..self.pos + offset];
+        const slice = self.input[self.pos .. self.pos + offset];
         self.pos += offset;
 
         return .{ .NUMBER = std.fmt.parseFloat(f32, slice) catch unreachable };
@@ -155,8 +156,8 @@ pub const JsonTokeniser = struct {
         return .NULL;
     }
 
-    fn tokeniseCharacter(self: *Self) TokenizerError!JsonToken {
-        return switch (self.consume()) {
+    fn tokeniseCharacter(self: *Self) TokenizerError!?JsonToken {
+        return switch (self.consume() orelse return null) {
             '{' => .OPEN_CURLY_BRACE,
             '}' => .CLOSE_CURLY_BRACE,
             '[' => .OPEN_SQUARE_BRACE,
@@ -169,16 +170,16 @@ pub const JsonTokeniser = struct {
 
     fn safeCompareAhead(self: *Self, s: []const u8) bool {
         if (self.pos + s.len > self.input.len) return false;
-        const slice = self.input[self.pos..self.pos + s.len];
+        const slice = self.input[self.pos .. self.pos + s.len];
         return std.mem.eql(u8, slice, s);
     }
 };
 
 //debug function
 pub fn printToken(token: JsonToken) void {
-    switch(token) {
-        .NUMBER => std.debug.print("{s}({d})\n", .{@tagName(token), token.NUMBER}),
-        .STRING => std.debug.print("{s}({s})\n", .{@tagName(token), token.STRING}),
+    switch (token) {
+        .NUMBER => std.debug.print("{s}({d})\n", .{ @tagName(token), token.NUMBER }),
+        .STRING => std.debug.print("{s}({s})\n", .{ @tagName(token), token.STRING }),
         else => std.debug.print("{s}\n", .{@tagName(token)}),
     }
 }
