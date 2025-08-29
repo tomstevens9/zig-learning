@@ -4,7 +4,7 @@ const json_parser = @import("parser.zig");
 const TEST_INPUT =
     \\{
     \\  "name": "Tom Stevens",
-    \\  "age": 29,
+    \\  "age": 29.8,
     \\  "ownsDog": true,
     \\  "ownsCat": false,
     \\  "sample": null

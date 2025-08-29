@@ -1,6 +1,6 @@
 const std = @import("std");
-const JsonTokeniser = @import("tokeniser.zig").JsonTokeniser;
-const TokenizerError = @import("tokeniser.zig").TokenizerError;
+const Tokenizer = @import("tokenizer.zig").Tokenizer;
+const TokenizerError = @import("tokenizer.zig").TokenizerError;
 
 const ParserError = error{
     UnexpectedToken,
@@ -39,11 +39,11 @@ const JsonValue = union(enum) {
 
 const JsonParser = struct {
     allocator: std.mem.Allocator,
-    tokeniser: JsonTokeniser,
+    tokeniser: Tokenizer,
 
     const Self = @This();
 
-    pub fn init(allocator: std.mem.Allocator, tokeniser: JsonTokeniser) JsonParser {
+    pub fn init(allocator: std.mem.Allocator, tokeniser: Tokenizer) JsonParser {
         return JsonParser{ .allocator = allocator, .tokeniser = tokeniser };
     }
 
@@ -133,7 +133,7 @@ const JsonParser = struct {
 };
 
 pub fn parse(allocator: std.mem.Allocator, input: []const u8) ParserError!JsonValue {
-    var tokeniser = JsonTokeniser.init(allocator, input);
+    var tokeniser = Tokenizer.init(allocator, input);
     defer tokeniser.deinit();
     var parser = JsonParser.init(allocator, tokeniser);
     return parser.parse();
