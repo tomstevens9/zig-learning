@@ -32,19 +32,29 @@ pub const Token = union(enum) {
     const Self = @This();
 
     pub fn deinit(self: Self, allocator: std.mem.Allocator) void {
-        if (self == .STRING) {
-            allocator.free(self.STRING);
+        switch (self) {
+            .STRING => |str| allocator.free(str),
+            else => {},
         }
     }
 };
 
 fn isWhitespace(c: u8) bool {
     return switch(c) {
-        ' ' => true,
-        '\n' => true,
-        '\r' => true,
-        '\t' => true,
+        ' ', '\n', '\r', '\t' => true,
         else => false,
+    };
+}
+
+fn characterToToken(c: u8) TokenizerError!Token {
+    return switch (c) {
+        '{' => .OPEN_CURLY_BRACE,
+        '}' => .CLOSE_CURLY_BRACE,
+        '[' => .OPEN_SQUARE_BRACE,
+        ']' => .CLOSE_SQUARE_BRACE,
+        ',' => .COMMA,
+        ':' => .COLON,
+        else => return TokenizerError.UnexpectedCharacter,
     };
 }
 
@@ -87,7 +97,7 @@ pub const Tokenizer = struct {
                 't' => try self.tokenizeTrue(),
                 'f' => try self.tokenizeFalse(),
                 'n' => try self.tokenizeNull(),
-                else => try self.tokenizeCharacter(),
+                else => try characterToToken(self.consumeChar().?),
             };
         }
         return self.next_token;
@@ -199,7 +209,7 @@ pub const Tokenizer = struct {
             while (self.peekChar()) |char| {
                 if (!std.ascii.isDigit(char)) break;
                 _ = self.consumeChar();
-                const value: f32 = @as(f32, @floatFromInt(char)) - @as(f32, 48.0);
+                const value: f32 = @floatFromInt(char - 48);
                 whole_part *= 10.0;
                 whole_part += value;
             }
@@ -222,7 +232,7 @@ pub const Tokenizer = struct {
             while (self.peekChar()) |char| {
                 if (!std.ascii.isDigit(char)) break;
                 _ = self.consumeChar();
-                const value: f32 = @as(f32, @floatFromInt(char)) - @as(f32, 48.0);
+                const value: f32 = @floatFromInt(char - 48);
                 fraction_part += (value * coefficient);
                 coefficient *= 0.1;
             }
@@ -250,7 +260,7 @@ pub const Tokenizer = struct {
             while (self.peekChar()) |char| {
                 if (!std.ascii.isDigit(char)) break;
                 _ = self.consumeChar();
-                const value: f32 = @as(f32, @floatFromInt(char)) - @as(f32, 48.0);
+                const value: f32 = @floatFromInt(char - 48);
                 exponent_part *= 10.0;
                 exponent_part += value;
             }
@@ -284,7 +294,7 @@ pub const Tokenizer = struct {
     }
 
     fn tokenizeCharacter(self: *Self) TokenizerError!?Token {
-        return switch (self.consumeChar() orelse return null) {
+        return switch (self.consumeChar().?) {
             '{' => .OPEN_CURLY_BRACE,
             '}' => .CLOSE_CURLY_BRACE,
             '[' => .OPEN_SQUARE_BRACE,
