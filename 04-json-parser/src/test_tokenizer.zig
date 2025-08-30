@@ -183,3 +183,30 @@ test "tokenize negative exponent" {
 
     try std.testing.expectApproxEqRel(0.123, token.NUMBER, SQRT_EPS_VALUE);
 }
+
+// Detailed string parsing
+test "tokenize escape sequences" {
+    
+    const test_data = [_][2][]const u8{
+        // input string, expected tokenized string
+        .{ "\"\\\"\"", "\"" },
+        .{ "\"\\\\\"", "\\" },
+        .{ "\"\\/\"", "/" },
+        .{ "\"\\b\"", "\x08" },
+        .{ "\"\\t\"", "\t" },
+        .{ "\"\\n\"", "\n" },
+        .{ "\"\\f\"", "\x0c" },
+        .{ "\"\\r\"", "\r" },
+    };
+
+    for (test_data) |row| {
+        var tokenizer = Tokenizer.init(std.testing.allocator, row[0]);
+        defer tokenizer.deinit();
+
+        const token = try tokenizer.next() orelse unreachable;
+        defer token.deinit(std.testing.allocator);
+
+        try std.testing.expectEqualStrings(row[1], token.STRING);
+    }
+
+}

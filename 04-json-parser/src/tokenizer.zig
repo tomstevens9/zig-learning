@@ -1,3 +1,7 @@
+// TODO MUST support unicode (UTF-8)
+// TODO MUST improve true, false, null handling
+// TODO MUST more tests
+// TODO SHOULD improve error information
 const std = @import("std");
 
 pub const TokenizerError = error{
@@ -5,6 +9,7 @@ pub const TokenizerError = error{
     UnexpectedCharacter,
     InvalidNumber,
     UnclosedString,
+    InvalidEscapeSequence,
 } || std.mem.Allocator.Error;
 
 const TRUE = "true";
@@ -33,6 +38,16 @@ pub const Token = union(enum) {
     }
 };
 
+fn isWhitespace(c: u8) bool {
+    return switch(c) {
+        ' ' => true,
+        '\n' => true,
+        '\r' => true,
+        '\t' => true,
+        else => false,
+    };
+}
+
 pub const Tokenizer = struct {
     allocator: std.mem.Allocator,
     input: []const u8,
@@ -59,15 +74,16 @@ pub const Tokenizer = struct {
             return null;
         }
         // Skip any whitespace
-        while (std.ascii.isWhitespace(self.peekChar() orelse return null)) {
+        while (isWhitespace(self.peekChar() orelse return null)) {
             self.pos += 1;
         }
         // Peek the next value
         if (self.nextTokenIsNumber()) {
             self.next_token = try self.tokenizeNumber();
+        } else if (self.nextTokenIsString()) {
+            self.next_token = try self.tokenizeString(); 
         } else {
             self.next_token = switch (self.peekChar() orelse return null) {
-                '"' => try self.tokenizeString(),
                 't' => try self.tokenizeTrue(),
                 'f' => try self.tokenizeFalse(),
                 'n' => try self.tokenizeNull(),
@@ -95,27 +111,57 @@ pub const Tokenizer = struct {
     }
 
     fn consumeChar(self: *Self) ?u8 {
-        const current_char = self.peekChar() orelse return null; // TODO Could just use .?
+        const current_char = self.peekChar() orelse return null;
         self.pos += 1;
         return current_char;
     }
 
+
+    fn nextTokenIsString(self: *Self) bool {
+        if (self.peekChar()) |char| {
+            return char == '"';
+        }
+        return false;
+    }
+
     fn tokenizeString(self: *Self) TokenizerError!Token {
         // TODO support escape sequences
-        // Look ahead to find the closing quote
-        var offset: usize = 1;
-        while (self.input[self.pos + offset] != '"') {
-            offset += 1;
-            if (self.pos + offset >= self.input.len) {
-                return TokenizerError.UnclosedString;
+        // Consume opening quote
+        _ = self.consumeChar();
+
+        // Incrementally build the string until encountering closing quote
+        var string_builder = std.ArrayList(u8){};
+        defer string_builder.deinit(self.allocator);
+        while (self.consumeChar()) |char| {
+            if (char == '"') break;
+            if (char == '\\') {  // handle escape sequences
+                const escape_char = try self.processEscapeSequence();
+                try string_builder.append(self.allocator, escape_char);
+            } else {
+                try string_builder.append(self.allocator, char);
             }
+        } else {
+            return TokenizerError.UnclosedString;
         }
+
         // Store the string itself as part of the tagged union. Exclude the quotation marks
-        const slice = self.input[self.pos + 1 .. self.pos + offset];
-        const owned_string = try self.allocator.dupe(u8, slice);
+        const owned_string = try self.allocator.dupe(u8, string_builder.items);
         errdefer self.allocator.free(owned_string);
-        self.pos += (offset + 1);
         return .{ .STRING = owned_string };
+    }
+
+    fn processEscapeSequence(self: *Self) TokenizerError!u8 {
+        return switch (self.consumeChar() orelse return TokenizerError.InvalidEscapeSequence) {
+            '"' => '"',
+            '\\' => '\\',
+            '/' => '/',
+            'b' => '\x08',  // backspace
+            't' => '\t',
+            'n' => '\n',
+            'f' => '\x0c',  // formfeed
+            'r' => '\r',
+            else => return TokenizerError.InvalidEscapeSequence,
+        };
     }
 
     fn nextTokenIsNumber(self: *Self) bool {
