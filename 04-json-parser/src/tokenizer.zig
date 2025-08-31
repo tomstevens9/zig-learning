@@ -1,4 +1,3 @@
-// TODO MUST support unicode (UTF-8)
 // TODO MUST more tests
 // TODO SHOULD improve error information
 const std = @import("std");
@@ -9,6 +8,7 @@ pub const TokenizerError = error{
     InvalidNumber,
     UnclosedString,
     InvalidEscapeSequence,
+    InvalidUtf8String,
 };
 
 const Keyword = enum {
@@ -115,10 +115,22 @@ pub const Tokenizer = struct {
         return self.input[self.pos];
     }
 
+    fn peekSlice(self: *Self, len: usize) TokenizerError![]const u8 {
+        // TODO better error handling
+        if (self.pos + len >= self.input.len) return TokenizerError.InvalidValue;
+        return self.input[self.pos .. self.pos + len];
+    }
+
     fn consumeChar(self: *Self) ?u8 {
-        const current_char = self.peekChar() orelse return null;
+        const char = self.peekChar() orelse return null;
         self.pos += 1;
-        return current_char;
+        return char;
+    }
+
+    fn consumeSlice(self: *Self, len: usize) TokenizerError![]const u8 {
+        const slice = try self.peekSlice(len);
+        self.pos += len;
+        return slice;
     }
 
     fn nextTokenIsString(self: *Self) bool {
@@ -132,17 +144,26 @@ pub const Tokenizer = struct {
         // Consume opening quote
         _ = self.consumeChar();
 
-        // Find the length of the string
+        // Get the contents of the string to store on the token.
+        // Note: The bytes stored on the token are the raw bytes from the
+        // input, however basic validation is done to ensure the strings are
+        // valid UTF-8.
         const start: usize = self.pos;
         var len: usize = 0;
-        while (self.consumeChar()) |char| {
-            if (char == '"') break;
-            len += 1;
-        } else {
-            return TokenizerError.UnclosedString;
-        }
+        while (self.peekChar()) |char| {
+            if (char == '"') {
+                _ = self.consumeChar();
+                break;
+            }
 
-        // Store the string itself as part of the tagged union. Exclude the quotation marks
+            // Validate the UTF-8 sequence
+            const cp_len = std.unicode.utf8ByteSequenceLength(char) catch return TokenizerError.InvalidUtf8String;
+            const bytes = try self.consumeSlice(cp_len);
+            _ = std.unicode.utf8Decode(bytes) catch return TokenizerError.InvalidUtf8String;
+            len += cp_len;
+        } else return TokenizerError.UnclosedString;
+
+        // Store the raw string as part of the token
         return .{ .STRING = self.input[start .. start + len] };
     }
 
