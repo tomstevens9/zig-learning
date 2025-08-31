@@ -52,8 +52,7 @@ const JsonParser = struct {
     }
 
     fn parseElement(self: *Self) ParserError!JsonValue {
-        var token = try self.tokeniser.next() orelse return ParserError.UnexpectedEndOfInput;
-        defer token.deinit(self.allocator);
+        const token = try self.tokeniser.next() orelse return ParserError.UnexpectedEndOfInput;
         return switch (token) {
             .NUMBER => .{ .number = token.NUMBER },
             .STRING => JsonValue{ .string = try self.allocator.dupe(u8, token.STRING) },
@@ -106,14 +105,12 @@ const JsonParser = struct {
 
         while (true) {
             const key_token = try self.tokeniser.next() orelse return ParserError.UnexpectedEndOfInput;
-            defer key_token.deinit(self.allocator);
             const key = switch (key_token) {
                 .STRING => try self.allocator.dupe(u8, key_token.STRING),
                 else => return ParserError.UnexpectedToken,
             };
             errdefer self.allocator.free(key);
             const expected_colon_token = try self.tokeniser.next() orelse return ParserError.UnexpectedEndOfInput;
-            defer expected_colon_token.deinit(self.allocator);
             if (expected_colon_token != .COLON) return ParserError.UnexpectedToken;
             var value = try self.parseElement();
             errdefer value.deinit(self.allocator);
@@ -133,8 +130,7 @@ const JsonParser = struct {
 };
 
 pub fn parse(allocator: std.mem.Allocator, input: []const u8) ParserError!JsonValue {
-    var tokeniser = Tokenizer.init(allocator, input);
-    defer tokeniser.deinit();
+    const tokeniser = Tokenizer.init(input);
     var parser = JsonParser.init(allocator, tokeniser);
     return parser.parse();
 }

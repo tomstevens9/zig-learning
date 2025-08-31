@@ -9,7 +9,7 @@ pub const TokenizerError = error{
     InvalidNumber,
     UnclosedString,
     InvalidEscapeSequence,
-} || std.mem.Allocator.Error;
+};
 
 const Keyword = enum {
     true,
@@ -29,15 +29,6 @@ pub const Token = union(enum) {
     NULL,
     STRING: []const u8,
     NUMBER: f32,
-
-    const Self = @This();
-
-    pub fn deinit(self: Self, allocator: std.mem.Allocator) void {
-        switch (self) {
-            .STRING => |str| allocator.free(str),
-            else => {},
-        }
-    }
 };
 
 fn isWhitespace(c: u8) bool {
@@ -67,22 +58,19 @@ fn characterToToken(c: u8) TokenizerError!Token {
     };
 }
 
+// This struct uses slices to reference parts of the input. As such, it is
+// couples to the lifetime of the input. This shouldn't be an issue because
+// the tokenizer is immediately passed to, and used, by the parser, which
+// _does_ allocate it's own memory and is therefore not couples to the input.
 pub const Tokenizer = struct {
-    allocator: std.mem.Allocator,
     input: []const u8,
     pos: usize,
     next_token: ?Token,
 
     const Self = @This();
 
-    pub fn init(allocator: std.mem.Allocator, input: []const u8) Tokenizer {
-        return .{ .allocator = allocator, .input = input, .pos = 0, .next_token = null };
-    }
-
-    pub fn deinit(self: Self) void {
-        if (self.next_token) |token| {
-            token.deinit(self.allocator);
-        }
+    pub fn init(input: []const u8) Tokenizer {
+        return .{ .input = input, .pos = 0, .next_token = null };
     }
 
     pub fn peek(self: *Self) TokenizerError!?Token {
@@ -119,7 +107,7 @@ pub const Tokenizer = struct {
     }
 
     pub fn skip(self: *Self) TokenizerError!void {
-        if (try self.next()) |token| token.deinit(self.allocator);
+        _ = try self.next();
     }
 
     fn peekChar(self: *Self) ?u8 {
@@ -144,26 +132,45 @@ pub const Tokenizer = struct {
         // Consume opening quote
         _ = self.consumeChar();
 
-        // Incrementally build the string until encountering closing quote
-        var string_builder = std.ArrayList(u8){};
-        defer string_builder.deinit(self.allocator);
+        // Find the length of the string
+        const start: usize = self.pos;
+        var len: usize = 0;
         while (self.consumeChar()) |char| {
             if (char == '"') break;
-            if (char == '\\') { // handle escape sequences
-                const escape_char = try self.processEscapeSequence();
-                try string_builder.append(self.allocator, escape_char);
-            } else {
-                try string_builder.append(self.allocator, char);
-            }
+            len += 1;
         } else {
             return TokenizerError.UnclosedString;
         }
 
         // Store the string itself as part of the tagged union. Exclude the quotation marks
-        const owned_string = try self.allocator.dupe(u8, string_builder.items);
-        errdefer self.allocator.free(owned_string);
-        return .{ .STRING = owned_string };
+        return .{ .STRING = self.input[start .. start + len] };
     }
+
+    //fn oldTokenizeString(self: *Self) TokenizerError!Token {
+    //// Consume opening quote
+    //_ = self.consumeChar();
+    //
+    //// Incrementally build the string until encountering closing quote
+    //// Cound length of string
+    //var string_builder = std.ArrayList(u8){};
+    //defer string_builder.deinit(self.allocator);
+    //while (self.consumeChar()) |char| {
+    //if (char == '"') break;
+    //if (char == '\\') { // handle escape sequences
+    //const escape_char = try self.processEscapeSequence();
+    //try string_builder.append(self.allocator, escape_char);
+    //} else {
+    //try string_builder.append(self.allocator, char);
+    //}
+    //} else {
+    //return TokenizerError.UnclosedString;
+    //}
+    //
+    //// Store the string itself as part of the tagged union. Exclude the quotation marks
+    //const owned_string = try self.allocator.dupe(u8, string_builder.items);
+    //errdefer self.allocator.free(owned_string);
+    //return .{ .STRING = owned_string };
+    //}
 
     fn processEscapeSequence(self: *Self) TokenizerError!u8 {
         return switch (self.consumeChar() orelse return TokenizerError.InvalidEscapeSequence) {
