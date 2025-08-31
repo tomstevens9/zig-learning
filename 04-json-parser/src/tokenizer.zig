@@ -1,5 +1,4 @@
 // TODO MUST support unicode (UTF-8)
-// TODO MUST improve true, false, null handling
 // TODO MUST more tests
 // TODO SHOULD improve error information
 const std = @import("std");
@@ -12,9 +11,11 @@ pub const TokenizerError = error{
     InvalidEscapeSequence,
 } || std.mem.Allocator.Error;
 
-const TRUE = "true";
-const FALSE = "false";
-const NULL = "null";
+const Keyword = enum {
+    true,
+    false,
+    null,
+};
 
 pub const Token = union(enum) {
     OPEN_CURLY_BRACE,
@@ -40,9 +41,17 @@ pub const Token = union(enum) {
 };
 
 fn isWhitespace(c: u8) bool {
-    return switch(c) {
+    return switch (c) {
         ' ', '\n', '\r', '\t' => true,
         else => false,
+    };
+}
+
+fn keywordToToken(keyword: Keyword) Token {
+    return switch (keyword) {
+        .true => .TRUE,
+        .false => .FALSE,
+        .null => .NULL,
     };
 }
 
@@ -91,12 +100,10 @@ pub const Tokenizer = struct {
         if (self.nextTokenIsNumber()) {
             self.next_token = try self.tokenizeNumber();
         } else if (self.nextTokenIsString()) {
-            self.next_token = try self.tokenizeString(); 
+            self.next_token = try self.tokenizeString();
         } else {
             self.next_token = switch (self.peekChar() orelse return null) {
-                't' => try self.tokenizeTrue(),
-                'f' => try self.tokenizeFalse(),
-                'n' => try self.tokenizeNull(),
+                't', 'f', 'n' => try self.tokenizeKeyword(),
                 else => try characterToToken(self.consumeChar().?),
             };
         }
@@ -126,7 +133,6 @@ pub const Tokenizer = struct {
         return current_char;
     }
 
-
     fn nextTokenIsString(self: *Self) bool {
         if (self.peekChar()) |char| {
             return char == '"';
@@ -135,7 +141,6 @@ pub const Tokenizer = struct {
     }
 
     fn tokenizeString(self: *Self) TokenizerError!Token {
-        // TODO support escape sequences
         // Consume opening quote
         _ = self.consumeChar();
 
@@ -144,7 +149,7 @@ pub const Tokenizer = struct {
         defer string_builder.deinit(self.allocator);
         while (self.consumeChar()) |char| {
             if (char == '"') break;
-            if (char == '\\') {  // handle escape sequences
+            if (char == '\\') { // handle escape sequences
                 const escape_char = try self.processEscapeSequence();
                 try string_builder.append(self.allocator, escape_char);
             } else {
@@ -165,10 +170,10 @@ pub const Tokenizer = struct {
             '"' => '"',
             '\\' => '\\',
             '/' => '/',
-            'b' => '\x08',  // backspace
+            'b' => '\x08', // backspace
             't' => '\t',
             'n' => '\n',
-            'f' => '\x0c',  // formfeed
+            'f' => '\x0c', // formfeed
             'r' => '\r',
             else => return TokenizerError.InvalidEscapeSequence,
         };
@@ -269,28 +274,21 @@ pub const Tokenizer = struct {
         return exponent_part;
     }
 
-    fn tokenizeTrue(self: *Self) TokenizerError!Token {
-        if (!self.safeCompareAhead(TRUE)) {
+    fn tokenizeKeyword(self: *Self) TokenizerError!Token {
+        const expected_keyword_enum: Keyword = switch (self.peekChar().?) {
+            't' => .true,
+            'f' => .false,
+            'n' => .null,
+            else => return TokenizerError.InvalidValue,
+        };
+        const expected_str = @tagName(expected_keyword_enum);
+        if (!self.safeCompareAhead(expected_str)) {
             return TokenizerError.InvalidValue;
         }
-        self.pos += TRUE.len;
-        return .TRUE;
-    }
-
-    fn tokenizeFalse(self: *Self) TokenizerError!Token {
-        if (!self.safeCompareAhead(FALSE)) {
-            return TokenizerError.InvalidValue;
+        for (0..expected_str.len) |_| {
+            _ = self.consumeChar();
         }
-        self.pos += FALSE.len;
-        return .FALSE;
-    }
-
-    fn tokenizeNull(self: *Self) TokenizerError!Token {
-        if (!self.safeCompareAhead(NULL)) {
-            return TokenizerError.InvalidValue;
-        }
-        self.pos += NULL.len;
-        return .NULL;
+        return keywordToToken(expected_keyword_enum);
     }
 
     fn tokenizeCharacter(self: *Self) TokenizerError!?Token {

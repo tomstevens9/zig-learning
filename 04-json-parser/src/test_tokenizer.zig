@@ -186,7 +186,6 @@ test "tokenize negative exponent" {
 
 // Detailed string parsing
 test "tokenize escape sequences" {
-    
     const test_data = [_][2][]const u8{
         // input string, expected tokenized string
         .{ "\"\\\"\"", "\"" },
@@ -208,5 +207,4 @@ test "tokenize escape sequences" {
 
         try std.testing.expectEqualStrings(row[1], token.STRING);
     }
-
 }
