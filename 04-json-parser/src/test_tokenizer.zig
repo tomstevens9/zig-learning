@@ -65,7 +65,10 @@ test "tokenize number" {
 
     const token = try tokenizer.next() orelse unreachable;
 
-    try std.testing.expectEqual(Token{ .NUMBER = 123 }, token);
+    switch (token) {
+        .NUMBER => |value| try std.testing.expect(std.mem.eql(u8, value, "123")),
+        else => try std.testing.expect(false),
+    }
 }
 
 test "tokenize unexpected character" {
@@ -84,7 +87,10 @@ test "tokenize positive integer" {
 
     const token = try tokenizer.next() orelse unreachable;
 
-    try std.testing.expectEqual(123, token.NUMBER);
+    switch (token) {
+        .NUMBER => |value| try std.testing.expect(std.mem.eql(u8, value, "123")),
+        else => try std.testing.expect(false),
+    }
 }
 
 test "tokenize negative integer" {
@@ -94,7 +100,10 @@ test "tokenize negative integer" {
 
     const token = try tokenizer.next() orelse unreachable;
 
-    try std.testing.expectEqual(-123, token.NUMBER);
+    switch (token) {
+        .NUMBER => |value| try std.testing.expect(std.mem.eql(u8, value, "-123")),
+        else => try std.testing.expect(false),
+    }
 }
 
 test "tokenize zero" {
@@ -104,7 +113,10 @@ test "tokenize zero" {
 
     const token = try tokenizer.next() orelse unreachable;
 
-    try std.testing.expectEqual(0, token.NUMBER);
+    switch (token) {
+        .NUMBER => |value| try std.testing.expect(std.mem.eql(u8, value, "0")),
+        else => try std.testing.expect(false),
+    }
 }
 
 test "tokenize positive fraction" {
@@ -114,7 +126,10 @@ test "tokenize positive fraction" {
 
     const token = try tokenizer.next() orelse unreachable;
 
-    try std.testing.expectEqual(12.3, token.NUMBER);
+    switch (token) {
+        .NUMBER => |value| try std.testing.expect(std.mem.eql(u8, value, "12.3")),
+        else => try std.testing.expect(false),
+    }
 }
 
 test "tokenize negative fraction" {
@@ -124,7 +139,10 @@ test "tokenize negative fraction" {
 
     const token = try tokenizer.next() orelse unreachable;
 
-    try std.testing.expectEqual(-12.3, token.NUMBER);
+    switch (token) {
+        .NUMBER => |value| try std.testing.expect(std.mem.eql(u8, value, "-12.3")),
+        else => try std.testing.expect(false),
+    }
 }
 
 test "tokenize implictly positive exponent" {
@@ -134,7 +152,10 @@ test "tokenize implictly positive exponent" {
 
     const token = try tokenizer.next() orelse unreachable;
 
-    try std.testing.expectEqual(1230, token.NUMBER);
+    switch (token) {
+        .NUMBER => |value| try std.testing.expect(std.mem.eql(u8, value, "12.3e2")),
+        else => try std.testing.expect(false),
+    }
 }
 
 test "tokenize explicitly positive exponent" {
@@ -144,7 +165,10 @@ test "tokenize explicitly positive exponent" {
 
     const token = try tokenizer.next() orelse unreachable;
 
-    try std.testing.expectEqual(1230, token.NUMBER);
+    switch (token) {
+        .NUMBER => |value| try std.testing.expect(std.mem.eql(u8, value, "12.3e+2")),
+        else => try std.testing.expect(false),
+    }
 }
 
 test "tokenize negative exponent" {
@@ -154,7 +178,10 @@ test "tokenize negative exponent" {
 
     const token = try tokenizer.next() orelse unreachable;
 
-    try std.testing.expectApproxEqRel(0.123, token.NUMBER, SQRT_EPS_VALUE);
+    switch (token) {
+        .NUMBER => |value| try std.testing.expect(std.mem.eql(u8, value, "12.3e-2")),
+        else => try std.testing.expect(false),
+    }
 }
 
 // Detailed string parsing
