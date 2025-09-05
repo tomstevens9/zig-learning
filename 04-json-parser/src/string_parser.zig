@@ -118,6 +118,7 @@ fn encodeUtf8String(allocator: Allocator, s: []const u21) StringParserError![]co
     defer string_builder.deinit(allocator);
 
     const buf: []u8 = try allocator.alloc(u8, 4);
+    defer allocator.free(buf);
     for (s) |cp| {
         const no_bytes_written = std.unicode.utf8Encode(cp, buf) catch return StringParserError.MalformedUnicodeEscape;
         try string_builder.appendSlice(allocator, buf[0..no_bytes_written]);

@@ -5,7 +5,6 @@ pub const TokenizerError = error{
     UnexpectedCharacter,
     InvalidNumber,
     UnclosedString,
-    InvalidUtf8String,
 };
 
 const Keyword = enum {
@@ -15,15 +14,15 @@ const Keyword = enum {
 };
 
 pub const Token = union(enum) {
-    OPEN_CURLY_BRACE,
-    CLOSE_CURLY_BRACE,
-    OPEN_SQUARE_BRACE,
-    CLOSE_SQUARE_BRACE,
-    COMMA,
-    COLON,
-    TRUE,
-    FALSE,
-    NULL,
+    OPEN_CURLY_BRACE: void,
+    CLOSE_CURLY_BRACE: void,
+    OPEN_SQUARE_BRACE: void,
+    CLOSE_SQUARE_BRACE: void,
+    COMMA: void,
+    COLON: void,
+    TRUE: void,
+    FALSE: void,
+    NULL: void,
     STRING: []const u8,
     NUMBER: []const u8,
 };
@@ -112,21 +111,10 @@ pub const Tokenizer = struct {
         return self.input[self.pos];
     }
 
-    fn peekSlice(self: *Self, len: usize) TokenizerError![]const u8 {
-        if (self.pos + len >= self.input.len) return TokenizerError.InvalidValue;
-        return self.input[self.pos .. self.pos + len];
-    }
-
     fn consumeChar(self: *Self) ?u8 {
         const char = self.peekChar() orelse return null;
         self.pos += 1;
         return char;
-    }
-
-    fn consumeSlice(self: *Self, len: usize) TokenizerError![]const u8 {
-        const slice = try self.peekSlice(len);
-        self.pos += len;
-        return slice;
     }
 
     fn nextTokenIsString(self: *Self) bool {
@@ -140,23 +128,13 @@ pub const Tokenizer = struct {
         // Consume opening quote
         _ = self.consumeChar();
 
-        // Get the contents of the string to store on the token.
-        // Note: The bytes stored on the token are the raw bytes from the
-        // input, however basic validation is done to ensure the strings are
-        // valid UTF-8.
+        // Find length of string (excluding quotes)
         const start: usize = self.pos;
         var len: usize = 0;
-        while (self.peekChar()) |char| {
-            if (char == '"') {
-                _ = self.consumeChar();
-                break;
-            }
-
-            // Validate the UTF-8 sequence
-            const cp_len = std.unicode.utf8ByteSequenceLength(char) catch return TokenizerError.InvalidUtf8String;
-            const bytes = try self.consumeSlice(cp_len);
-            _ = std.unicode.utf8Decode(bytes) catch return TokenizerError.InvalidUtf8String;
-            len += cp_len;
+        var previous_char_was_escape = false;
+        while (self.consumeChar()) |char| : (len += 1) {
+            if (char == '"' and !previous_char_was_escape) break;
+            previous_char_was_escape = char == '\\';
         } else return TokenizerError.UnclosedString;
 
         // Store the raw string as part of the token
@@ -176,7 +154,7 @@ pub const Tokenizer = struct {
         // is what determined the next token was a number
         const start: usize = self.pos;
         var len: usize = 0;
-        const sign_multiplier: f32 = if (self.peekChar().? == '-') -1.0 else 1.0;
+        const sign_multiplier: f64 = if (self.peekChar().? == '-') -1.0 else 1.0;
         if (sign_multiplier == -1.0) {
             _ = self.consumeChar();
             len += 1;

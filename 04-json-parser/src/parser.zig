@@ -10,19 +10,15 @@ const NumberParser = @import("number_parser.zig").NumberParser;
 const ParserError = error{
     UnexpectedToken,
     UnexpectedEndOfInput,
-    InvalidHexDigit,
-    MalformedUtf8,
-    MalformedUnicodeEscape,
-    InvalidEscapeSequence,
 } || Allocator.Error || TokenizerError || StringParserError;
 
-const JsonValue = union(enum) {
+pub const JsonValue = union(enum) {
     object: std.StringHashMap(JsonValue),
     array: std.ArrayList(JsonValue),
-    number: f32,
+    number: f64,
     string: []const u8,
     boolean: bool,
-    null_value,
+    null_value: void,
 
     const Self = @This();
 
@@ -46,7 +42,7 @@ const JsonValue = union(enum) {
     }
 };
 
-fn parseNumber(input: []const u8) f32 {
+fn parseNumber(input: []const u8) f64 {
     var number_parser = NumberParser.init(input);
     return number_parser.parse();
 }
@@ -83,6 +79,7 @@ const JsonParser = struct {
 
     fn parseArray(self: *Self) ParserError!JsonValue {
         var array_list = std.ArrayList(JsonValue){};
+        errdefer array_list.deinit(self.allocator);
         // Handle special case of empty array
         if (try self.tokeniser.peek()) |token| {
             if (token == .CLOSE_SQUARE_BRACE) {
