@@ -3,7 +3,7 @@ const json_parser = @import("parser.zig");
 
 const TEST_INPUT =
     \\{
-    \\  "name": "Tom Stevens",
+    \\  "name": "Tom Stevens \u21AF",
     \\  "age": 29.8,
     \\  "ownsDog": true,
     \\  "ownsCat": false,

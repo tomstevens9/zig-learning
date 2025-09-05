@@ -1,5 +1,3 @@
-// TODO MUST more tests
-// TODO SHOULD improve error information
 const std = @import("std");
 
 pub const TokenizerError = error{
@@ -7,7 +5,6 @@ pub const TokenizerError = error{
     UnexpectedCharacter,
     InvalidNumber,
     UnclosedString,
-    InvalidEscapeSequence,
     InvalidUtf8String,
 };
 
@@ -116,7 +113,6 @@ pub const Tokenizer = struct {
     }
 
     fn peekSlice(self: *Self, len: usize) TokenizerError![]const u8 {
-        // TODO better error handling
         if (self.pos + len >= self.input.len) return TokenizerError.InvalidValue;
         return self.input[self.pos .. self.pos + len];
     }
@@ -165,46 +161,6 @@ pub const Tokenizer = struct {
 
         // Store the raw string as part of the token
         return .{ .STRING = self.input[start .. start + len] };
-    }
-
-    //fn oldTokenizeString(self: *Self) TokenizerError!Token {
-    //// Consume opening quote
-    //_ = self.consumeChar();
-    //
-    //// Incrementally build the string until encountering closing quote
-    //// Cound length of string
-    //var string_builder = std.ArrayList(u8){};
-    //defer string_builder.deinit(self.allocator);
-    //while (self.consumeChar()) |char| {
-    //if (char == '"') break;
-    //if (char == '\\') { // handle escape sequences
-    //const escape_char = try self.processEscapeSequence();
-    //try string_builder.append(self.allocator, escape_char);
-    //} else {
-    //try string_builder.append(self.allocator, char);
-    //}
-    //} else {
-    //return TokenizerError.UnclosedString;
-    //}
-    //
-    //// Store the string itself as part of the tagged union. Exclude the quotation marks
-    //const owned_string = try self.allocator.dupe(u8, string_builder.items);
-    //errdefer self.allocator.free(owned_string);
-    //return .{ .STRING = owned_string };
-    //}
-
-    fn processEscapeSequence(self: *Self) TokenizerError!u8 {
-        return switch (self.consumeChar() orelse return TokenizerError.InvalidEscapeSequence) {
-            '"' => '"',
-            '\\' => '\\',
-            '/' => '/',
-            'b' => '\x08', // backspace
-            't' => '\t',
-            'n' => '\n',
-            'f' => '\x0c', // formfeed
-            'r' => '\r',
-            else => return TokenizerError.InvalidEscapeSequence,
-        };
     }
 
     fn nextTokenIsNumber(self: *Self) bool {

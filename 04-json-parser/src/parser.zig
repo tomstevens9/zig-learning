@@ -2,14 +2,17 @@ const std = @import("std");
 const tokenizer = @import("tokenizer.zig");
 const Tokenizer = tokenizer.Tokenizer;
 const TokenizerError = tokenizer.TokenizerError;
+const string_parser = @import("string_parser.zig");
+const StringParserError = string_parser.StringParserError;
 
-// TODO switch some tokenizer errors to parser errors
 const ParserError = error{
     UnexpectedToken,
-    UnexpectedEndOfInput, // TODO better name
+    UnexpectedEndOfInput,
     InvalidHexDigit,
-    BadUTF8,
-} || std.mem.Allocator.Error || TokenizerError;
+    MalformedUtf8,
+    MalformedUnicodeEscape,
+    InvalidEscapeSequence,
+} || std.mem.Allocator.Error || TokenizerError || StringParserError;
 
 const JsonValue = union(enum) {
     object: std.StringHashMap(JsonValue),
@@ -140,95 +143,6 @@ const NumberParser = struct {
     }
 };
 
-const StringParser = struct {
-    allocator: std.mem.Allocator,
-    input: []const u8,
-    pos: usize,
-    string_builder: std.ArrayList(u8),
-
-    const Self = @This();
-
-    pub fn init(allocator: std.mem.Allocator, input: []const u8) StringParser {
-        return StringParser{ .allocator = allocator, .input = input, .pos = 0, .string_builder = std.ArrayList(u8){} };
-    }
-
-    pub fn deinit(self: *Self) void {
-        self.string_builder.deinit(self.allocator);
-    }
-
-    fn peek(self: *Self) ?u8 {
-        if (self.pos >= self.input.len) return null;
-        return self.input[self.pos];
-    }
-
-    fn consume(self: *Self) ?u8 {
-        const c = self.peek() orelse return null;
-        self.pos += 1;
-        return c;
-    }
-
-    fn parse(self: *Self) ParserError![]const u8 {
-        // Incrementally build the string until encountering closing quote
-        // Find length of string
-        while (self.consume()) |char| {
-            if (char == '\\') { // handle escape sequences
-                try self.processEscapeSequence();
-            } else {
-                try self.string_builder.append(self.allocator, char);
-            }
-        }
-
-        // Store the string itself as part of the tagged union. Exclude the quotation marks
-        const owned_string = try self.allocator.dupe(u8, self.string_builder.items);
-        return owned_string;
-    }
-
-    fn processEscapeSequence(self: *Self) ParserError!void {
-        const c = self.consume() orelse return TokenizerError.InvalidEscapeSequence;
-        if (c == 'u') return self.processUnicodeHexDigits();
-        const escaped_char: u8 = switch (c) {
-            '"' => '"',
-            '\\' => '\\',
-            '/' => '/',
-            'b' => '\x08', // backspace
-            't' => '\t',
-            'n' => '\n',
-            'f' => '\x0c', // formfeed
-            'r' => '\r',
-            'u' => 'u', // implement properly
-            else => return TokenizerError.InvalidEscapeSequence,
-        };
-        try self.string_builder.append(self.allocator, escaped_char);
-    }
-
-    fn processUnicodeHexDigits(self: *Self) ParserError!void {
-        var total: u21 = 0;
-        var multiplier: u21 = 4096;
-        for (0..4) |_| {
-            const c = self.consume() orelse return TokenizerError.InvalidEscapeSequence;
-            total += multiplier * try hexDigitToInt(c);
-            multiplier /= 16;
-        }
-        const codepoint_len = std.unicode.utf8CodepointSequenceLength(total) catch return ParserError.BadUTF8;
-        const buffer: []u8 = try self.allocator.alloc(u8, codepoint_len);
-        _ = std.unicode.utf8Encode(total, buffer) catch return ParserError.BadUTF8;
-        try self.string_builder.appendSlice(self.allocator, buffer);
-    }
-};
-
-fn hexDigitToInt(c: u8) ParserError!u21 {
-    if (std.ascii.isDigit(c)) return c - 48;
-    return switch (std.ascii.toLower(c)) {
-        'a' => 10,
-        'b' => 11,
-        'c' => 12,
-        'd' => 13,
-        'e' => 14,
-        'f' => 15,
-        else => ParserError.InvalidHexDigit,
-    };
-}
-
 fn parseNumber(input: []const u8) f32 {
     var number_parser = NumberParser.init(input);
     return number_parser.parse();
@@ -253,9 +167,7 @@ const JsonParser = struct {
         return switch (token) {
             .NUMBER => .{ .number = parseNumber(token.NUMBER) },
             .STRING => {
-                var string_parser = StringParser.init(self.allocator, token.STRING);
-                defer string_parser.deinit();
-                return JsonValue{ .string = try string_parser.parse() };
+                return JsonValue{ .string = try string_parser.parse(self.allocator, token.STRING) };
             },
             .TRUE => .{ .boolean = true },
             .FALSE => .{ .boolean = false },
