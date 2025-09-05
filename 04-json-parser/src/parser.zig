@@ -106,7 +106,14 @@ const JsonParser = struct {
 
     fn parseObject(self: *Self) ParserError!JsonValue {
         var hash_map = std.StringHashMap(JsonValue).init(self.allocator);
-        errdefer hash_map.deinit();
+        errdefer {
+            var iterator = hash_map.iterator();
+            while (iterator.next()) |entry| {
+                self.allocator.free(entry.key_ptr.*);
+                entry.value_ptr.deinit(self.allocator);
+            }
+            hash_map.deinit();
+        }
 
         // Handle special case of empty object
         if (try self.tokeniser.peek()) |token| {
